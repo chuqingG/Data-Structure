@@ -1,73 +1,73 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h> // �ṩ��va_list��va_start��va_arg��va_end
-#include <ctype.h>  // �ṩisprintԭ��
-
+#include <stdarg.h> // 提供宏va_list、va_start、va_arg、va_end
+#include <ctype.h>  // 提供isprint原型
+#include <stdlib.h>
 /*
- * �����Զ��������¼�뺯�������ڴ��ļ�fp�ж�ȡ��ʽ��������
- * ��fscanf��֮ͬ�����ڴ˺���ֻ���ȡ�����ַ������������ַ����������
+ * 这是自定义的数据录入函数，用于从文件fp中读取格式化的输入
+ * 与fscanf不同之处在于此函数只会读取西文字符，对于中文字符，则会跳过
  *
- * ע��
- * 1. ����Լ�����и�ʽ��Ϊ����ʽ���磺%d%c%s�ȣ�������%2d%5s��
- * 2. ��ȡ�ַ���ʱ�������ո��Ǵ�ӡ�ַ���ֹͣ��ȡ
+ * 注：
+ * 1. 这里约定所有格式串为简单形式，如：%d%c%s等，而不是%2d%5s等
+ * 2. 读取字符串时，遇到空格或非打印字符会停止读取
  */
 int ReadData(FILE* fp, char* format, ...) {
-    int* i;     // �洢��ȡ��������
-    float* f;   // �洢��ȡ���ĸ�����
-    char* ch;   // �洢��ȡ�����ַ���
-    char* s;    // �洢��ȡ�����ַ�����
+    int* i;     // 存储读取到的整型
+    float* f;   // 存储读取到的浮点型
+    char* ch;   // 存储读取到的字符型
+    char* s;    // 存储读取到的字符串型
 
-    int n;      // �����洢�ַ������ַ�����
+    int n;      // 遍历存储字符串的字符数组
 
-    int len;    // ��ʽ��format�ĳ���
-    int k;      // ������ʽ��ʱ���α�
+    int len;    // 格式串format的长度
+    int k;      // 遍历格式串时的游标
 
-    int tmp;    // �ݴ���ļ��ж�ȡ�����ַ�
+    int tmp;    // 暂存从文件中读取到的字符
 
-    va_list ap; // �ɱ����ָ�룬ָ��洢���ݵı���
+    va_list ap; // 可变参数指针，指向存储数据的变量
 
-    // �ۼƳɹ���ȡ�����ַ���
+    // 累计成功读取到的字符数
     int count = 0;
 
 
     /*
-     * ��ȡ��ʽ���ĳ���
-     * ����Ԥ���ʽ�����ɼ�
+     * 获取格式串的长度
+     * 这里预设格式串仅由简单
      */
     len = strlen(format);
 
-    // apָ���׸��ɱ����
+    // ap指向首个可变参数
     va_start(ap, format);
 
-    // ֻ����������������Ϊż�������¶���%
+    // 只遍历奇数索引，因为偶数索引下都是%
     for(k = 1; k <= len; k = k + 2) {
-        // �������з������ַ�
+        // 跳过所有非西文字符
         while((tmp = getc(fp)) != EOF) {
-            // �����׸������ַ������������ַ����·���������
+            // 遇到首个西文字符，将此西文字符重新放入输入流
             if((tmp >= 0 && tmp <= 127)) {
                 ungetc(tmp, fp);
                 break;
             }
         }
 
-        // ����Ѷ����ļ���β��������ȡ
+        // 如果已读到文件结尾，结束读取
         if(tmp == EOF) {
             break;
         }
 
-        // ������"%c"��Ӧ�ö�ȡ�ַ�
+        // 遇到了"%c"，应该读取字符
         if(format[k] == 'c') {
             ch = va_arg(ap, char*);
 
             count += fscanf(fp, "%c", ch);
         }
 
-        // ������"%d"��Ӧ�ö�ȡ����
+        // 遇到了"%d"，应该读取整型
         if(format[k] == 'd') {
             i = va_arg(ap, int*);
 
             while((tmp = getc(fp)) != EOF) {
-                // Ѱ����������
+                // 寻找整数区域
                 if((tmp >= '0' && tmp <= '9') || tmp == '-' || tmp == '+') {
                     ungetc(tmp, fp);
                     break;
@@ -79,7 +79,7 @@ int ReadData(FILE* fp, char* format, ...) {
             }
         }
 
-        // ��ȡ�����ͣ�һ�ɴ洢Ϊdouble����
+        // 读取浮点型，一律存储为double类型
         if(format[k] == 'f') {
             f = va_arg(ap, float*);
 
@@ -95,24 +95,24 @@ int ReadData(FILE* fp, char* format, ...) {
             }
         }
 
-        // ��ȡ�ַ���
+        // 读取字符串
         if(format[k] == 's') {
             s = va_arg(ap, char*);
 
             n = 0;
 
-            // �����ų��ո�Ŀɴ�ӡ�ַ�
+            // 查找排除空格的可打印字符
             while((tmp = getc(fp)) != EOF && (!isprint(tmp) || tmp == ' ')) {
             }
 
-            // ���δ���ļ���β
+            // 如果未到文件结尾
             if(!feof(fp)) {
 
-                // ������������ַ����·�������
+                // 将上面读到的字符重新放入流中
                 ungetc(tmp, fp);
 
                 while((tmp = getc(fp)) != EOF) {
-                    // �洢�ų��ո�Ŀɴ�ӡ�ַ�
+                    // 存储排除空格的可打印字符
                     if(isprint(tmp) && tmp != ' ') {
                         s[n++] = tmp;
                     } else {
@@ -124,7 +124,7 @@ int ReadData(FILE* fp, char* format, ...) {
                 count++;
             }
 
-            // �ַ������һ���ַ�Ϊ���ַ�
+            // 字符串最后一个字符为空字符
             s[n] = '\0';
         }
     }// for
@@ -134,7 +134,7 @@ int ReadData(FILE* fp, char* format, ...) {
     return count;
 }
 
-// ���»س����Լ�������
+// 摁下回车键以继续运行
 void PressEnterToContinue() {
     int debug = 1;
 
@@ -142,11 +142,11 @@ void PressEnterToContinue() {
 
     printf("\nPress Enter to Continue...");
 
-    // ���ڲ��Խ׶�ʱ��������debug=1���Զ����ӻ��У����ڲ���
+    // 处于测试阶段时，可以让debug=1，自动添加换行，便于测试
     if(debug) {
         printf("\n");
 
-        // ����ʱ��������debug=0���ֶ����뻻�У������ó�����ͣ�������۲�ÿһ�������
+        // 发布时，可以让debug=0，手动输入换行，否则让程序暂停下来，观察每一步的输出
     } else {
         getchar();
     }
@@ -154,12 +154,12 @@ void PressEnterToContinue() {
     fflush(stdin);
 }
 
-// ������ͣһ��ʱ�䣬time�����������ʱ��
+// 函数暂停一段时间，time不代表具体的时间
 void Wait(long time) {
     double i;
 
     for(i = 0.01; i <= 100000.0 * time; i += 0.01) {
-        // ��ѭ��
+        // 空循环
     }
 }
 
